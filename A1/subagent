@@ -3,7 +3,6 @@
 use NetSNMP::agent (':all');
 use NetSNMP::OID (':all');
 use NetSNMP::ASN (':all');
-#use Time::Local;
  
 
 sub hello_handler
