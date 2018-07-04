@@ -1,0 +1,53 @@
+#!/usr/bin/perl
+
+use NetSNMP::agent (':all');
+use NetSNMP::OID (':all');
+use NetSNMP::ASN (':all');
+#use Time::Local;
+ 
+
+sub hello_handler
+{	
+	my ($handler, $registration_info, $request_info, $requests) = @_;
+	my $request;
+	my @array;
+ 	my %a;
+  
+
+  	for($request = $requests; $request; $request = $request->next())
+	{
+    		my $oid = $request->getOID();
+		@array= split/[.]/, $oid;
+                $i=$array[-1]-1;
+
+    		if ($request_info->getMode() == MODE_GET)
+		{
+      			if ($oid == new NetSNMP::OID("1.3.6.1.4.1.4171.40.1")) 
+			{
+        			$request->setValue(ASN_COUNTER, time);
+      			}
+      			elsif ($oid > new NetSNMP::OID("1.3.6.1.4.1.4171.40.1")) 
+			{
+	 			my $timet = time();
+       				open DATA, '<',"path to counters.conf" or die "Couldn't open file file.txt, $!";
+       				while( <DATA>)
+				{
+              			chomp;
+              			my ($key,$value)= split(/,\s?/);
+              			$a{$key}= $value;
+				}
+                 		if (exists($a{$i}))
+				{               
+                  
+                  			my $y= $a{$i} * $timet;
+                   
+                          		$request->setValue(ASN_COUNTER, $y);
+     				}
+        			close DATA;  
+      			}
+   		 }
+	}
+}
+
+my $agent = new NetSNMP::agent();
+$agent->register("subagent", '.1.3.6.1.4.1.4171.40', \&hello_handler);
