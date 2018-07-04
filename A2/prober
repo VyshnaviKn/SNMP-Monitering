@@ -1,0 +1,68 @@
+#!/usr/bin/python
+import easysnmp
+from easysnmp import Session
+import sys
+import time
+
+
+frequency = sys.argv[2]
+t=1/float(frequency)
+s=sys.argv[3]
+ip,port,comm = sys.argv[1].split(":")
+oid = ['1.3.6.1.2.1.1.3.0']
+oids = oid + sys.argv[4:len(sys.argv)]
+
+
+num=0
+session = Session(hostname=ip, remote_port = port, community=comm, version=2,timeout=2,retries=1)
+
+pre=[]
+result=[]
+time3=0
+
+while (num != int(s)):
+  time1 = time.time()
+  try:  
+	cur = session.get(oids) 
+  except easysnmp.exceptions.EasySNMPTimeoutError:
+	print 'Waiting for system to respond'
+	continue
+  if len(cur)==len(pre):
+   cur_time=float(cur[0].value)/100
+   pre_time=float(pre[0].value)/100
+   if float(frequency) > 1:
+    dif = time1-time3
+   if float(frequency) <= 1:
+    d = time1-time3
+    if d!=0:
+     dif = int(d)
+    else:
+     dif = int(t)
+   for i in range(1,len(oids)):
+     if cur[i].value!="NOSUCHINSTANCE" and cur[i].value !="NOSUCHOBJECT" and pre[i].value!="NOSUCHINSTANCE": 
+        secval = int(cur[i].value)
+        inival = int(pre[i].value)
+        if secval>=inival:
+          res = (secval-inival)/dif
+          result.append(res)
+        if secval<inival :
+         if cur[i].snmp_type=="COUNTER64":
+          res = ((2**64+secval)-inival)/dif
+          result.append(res)
+         if cur[i].snmp_type=="COUNTER":
+          res = ((2**32+secval)-inival)/dif
+          result.append(res)
+     else:
+       print time1,"|"  
+  num = num+1 
+  if len(result)!=0:
+    jon = [str(get) for get in result]
+    print time1 ,'|', ("| " . join(jon))
+  pre = cur[:]
+  time3=time1
+  del result[:]
+  time2=time.time()
+  if t-time2+time1>0:
+    time.sleep(t-time2+time1)
+  else:
+    time.sleep(0.0)
