@@ -1,0 +1,28 @@
+#!/usr/bin/python -W
+
+
+import sys
+import os 
+import subprocess 
+
+
+array = sys.argv[3:]
+##print array
+
+subProcess = subprocess.Popen(['unbuffer','/tmp/A2/prober', sys.argv[1], sys.argv[2], '-1'] + array, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+for j in iter(subProcess.stdout.readline,""):
+	#print j
+        o= j.split('|') 
+        #print o
+        o= [x.strip(' ') for x in o]
+	k= [y.rstrip() for y in o]
+	timevalue = k[0]
+	#print timevalue
+    	timevalue=int(float(timevalue))
+        timevalue1 = str(timevalue).strip() + "000000000" 
+        del k[0]
+        
+	for a1,b1 in zip(k, array):
+	  os.system("curl -i -XPOST 'http://localhost:8086/write?db=A3' -u ats:atslabb00 --data-binary 'rate,oid=%s value=%f %d'"%(b1,float(a1),int(timevalue1)))
+        
