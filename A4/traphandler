@@ -1,0 +1,118 @@
+#!/usr/bin/env python  
+
+import sqlite3
+import time
+import logging
+import os
+import subprocess
+import sys
+import time
+logging.basicConfig(level=logging.DEBUG, filename="handler.log")
+
+community = "public"
+ip = "127.0.0.1"
+trap_handler = "b.txt"
+f=open(trap_handler,"w")
+logging.info("file created.")
+flag=True
+data = ""
+while flag:
+    try:
+        inp=raw_input()
+        logging.info("%s"%inp)
+        f.write(inp+"\n")
+    except EOFError as err:
+        logging.error(err)
+        flag=False
+    except Exception as err:
+        pass
+        logging.error(err)
+f.close()
+
+data=open(trap_handler).read().splitlines()
+
+con = sqlite3.connect('/opt/lampp/htdocs/snmptraphandler/snmp.sqlite')
+#con = sqlite3.connect('snmp.sqlite')
+cur = con.cursor()
+try:
+    f=open("a.txt","w")
+    fqdn = data[4].split()[-1].strip('"')
+    gateway = data[6].split()[-1].strip()
+    status = data[5][-1]
+    reporttime = int(float(time.time()))
+    q="select fqdn, status, reporttime, oldreporttime, oldstatus from snmpstatus where fqdn='%s'"%fqdn
+    
+    cur.execute(q)
+    
+
+    fqdn_details = cur.fetchall()
+    
+    if fqdn_details:
+        details = fqdn_details[0]
+        oldstatus = details[1]
+        oldreporttime = int(float(details[2]))
+        q="update snmpstatus set oldreporttime='%d', oldstatus=%s, status=%s, \
+        reporttime='%d' where fqdn='%s'"%(oldreporttime, oldstatus, status, reporttime, fqdn)
+        
+        
+        cur.execute(q)
+        con.commit()
+        
+    else:
+        q="insert into snmpstatus (fqdn, status, reporttime, oldreporttime, oldstatus) \
+        values('%s',%s,'%d','%d',%s)"%(fqdn, status,reporttime,reporttime,status)
+        cur.execute(q)
+        con.commit()
+        oldreporttime=reporttime
+    	oldstatus=status	
+        
+    if status == "3":
+        q="select ip,port,community from snmpdetails"
+        cur.execute(q)
+        data = cur.fetchone()
+        try:
+		command='snmptrap -v 1 -c %s %s:%s .1.3.6.1.4.1.41717.20 %s 6 247 " " .1.3.6.1.4.1.41717.20.1 s "%s" .1.3.6.1.4.1.41717.20.2 t "%s" .1.3.6.1.4.1.41717.20.3 i "%s" .1.3.6.1.4.1.41717.20.4  t "%s"'%(data[2],data[0],data[1], gateway, fqdn,reporttime,oldstatus,oldreporttime)
+		
+		out, err = subprocess.Popen(command, universal_newlines=True, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+		
+        except Exception as err:
+            f.write(str(err))
+        finally:
+            f.flush() 
+	f.write("Fail Trap Sent\n") 
+     
+    if status == "2":
+	q="select ip,port,community from snmpdetails"
+        cur.execute(q)
+        data = cur.fetchone()        
+        q="select fqdn, reporttime, status, oldstatus, oldreporttime from snmpstatus where status=2 and oldstatus!=3"
+        cur.execute(q)
+        danger_records = cur.fetchall()
+        f.write(str(danger_records)+"\n")
+        i=0
+        command1 = 'snmptrap -v 1 -c %s %s:%s .1.3.6.1.4.1.41717.30 %s 6 247 " "'%(data[2],data[0],data[1], gateway)
+	try:
+            for rec in danger_records:
+            
+            	fqdn, reporttime, status, oldstatus, oldreporttime = rec
+		command2=' .1.3.6.1.4.1.41717.30.'+str(4*i+1)+' s '+"\"%s\""%fqdn+' .1.3.6.1.4.1.41717.30.'+str(4*i+2)+' i '+"\"%s\""%str(reporttime)+' .1.3.6.1.4.1.41717.30.'+str(4*i+3)+' i '+"\"%s\""%str(oldstatus)+' .1.3.6.1.4.1.41717.30.'+str(4*i+4)+' i '+"\"%s\""%str(oldreporttime)
+         	command=command1+command2
+         	command1=command
+         	i=i+1
+        except Exception as err:
+                        f.write(str(err))
+        finally:
+                        f.flush()
+        if i>=2:
+            f.write("Sending Danger Trap\n") 
+            f.write("command: %s\n" % command)
+            out, err = subprocess.Popen(command, universal_newlines=True, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+            f.write("error: %s" % err)
+        
+except Exception as err:
+    f.write(str(err))
+   
+finally:
+    con.close()
+f.close()
+
